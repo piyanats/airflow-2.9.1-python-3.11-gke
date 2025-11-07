@@ -1,0 +1,237 @@
+# Apache Airflow Helm Chart Values for GKE
+# Airflow version: 2.9.1
+# Python version: 3.11
+
+# Custom Airflow image
+images:
+  airflow:
+    repository: us.gcr.io/YOUR-PROJECT-ID/airflow-custom  # Update with your GCR path
+    tag: 2.9.1-python3.11
+    pullPolicy: IfNotPresent
+
+# Airflow version
+airflowVersion: "2.9.1"
+
+# Executor - Use KubernetesExecutor for GKE
+executor: "KubernetesExecutor"
+
+# Airflow configuration
+config:
+  # Core configuration
+  core:
+    dags_folder: /opt/airflow/dags
+    load_examples: 'false'
+    executor: KubernetesExecutor
+
+  # Logging configuration for GCS
+  logging:
+    remote_logging: 'true'
+    remote_log_conn_id: 'google_cloud_default'
+    remote_base_log_folder: 'gs://YOUR-GCS-BUCKET/airflow/logs'  # Update with your GCS bucket
+    logging_level: 'INFO'
+    colored_console_log: 'false'
+
+  # GCS configuration
+  google:
+    cloud:
+      storage:
+        bucket: 'YOUR-GCS-BUCKET'  # Update with your GCS bucket
+
+  # Webserver configuration
+  webserver:
+    base_url: 'http://localhost:8080'  # Update with your domain
+    expose_config: 'true'
+
+  # Kubernetes executor configuration
+  kubernetes_executor:
+    namespace: 'default'
+    worker_container_repository: us.gcr.io/YOUR-PROJECT-ID/airflow-custom  # Update with your GCR path
+    worker_container_tag: 2.9.1-python3.11
+    delete_worker_pods: 'true'
+    delete_worker_pods_on_failure: 'false'
+
+# Environment variables
+env:
+  # GCP Project configuration
+  - name: GCP_PROJECT_ID
+    value: "YOUR-PROJECT-ID"  # Update with your GCP project ID
+  - name: AIRFLOW__CORE__FERNET_KEY
+    valueFrom:
+      secretKeyRef:
+        name: airflow-fernet-key
+        key: fernet-key
+  # Add additional environment variables here
+
+# External PostgreSQL Configuration
+postgresql:
+  enabled: false  # We're using external PostgreSQL
+
+# External database configuration (Cloud SQL or external PostgreSQL)
+data:
+  metadataConnection:
+    user: airflow
+    pass: airflow_password  # Change this! Better to use secret
+    protocol: postgresql
+    host: YOUR-POSTGRESQL-HOST  # Update: Cloud SQL private IP or host
+    port: 5432
+    db: airflow
+    sslmode: disable  # Set to 'require' for Cloud SQL with SSL
+
+# GCS for logs - workload identity configuration
+serviceAccount:
+  create: true
+  name: "airflow-sa"
+  annotations:
+    iam.gke.io/gcp-service-account: "airflow-gke@YOUR-PROJECT-ID.iam.gserviceaccount.com"  # Update with your GSA
+
+# DAGs: Git-Sync Configuration with SSH
+dags:
+  persistence:
+    enabled: false
+  gitSync:
+    enabled: true
+    repo: git@github.com:YOUR-ORG/YOUR-REPO.git  # Update with your Git repo
+    branch: main
+    rev: HEAD
+    depth: 1
+    maxFailures: 0
+    subPath: "dags"  # Path to DAGs folder in repo
+    wait: 60
+    containerName: git-sync
+    uid: 65533
+
+    # SSH Key Secret for private repositories
+    sshKeySecret: airflow-ssh-secret  # Create this secret with your SSH private key
+
+    # Known hosts (GitHub)
+    knownHosts: |
+      github.com ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABgQCj7ndNxQowgcQnjshcLrqPEiiphnt+VTTvDP6mHBL9j1aNUkY4Ue1gvwnGLVlOhGeYrnZaMgRK6+PKCUXaDbC7qtbW8gIkhL7aGCsOr/C56SJMy/BCZfxd1nWzAOxSDPgVsmerOBYfNqltV9/hWCqBywINIR+5dIg6JTJ72pcEpEjcYgXkE2YEFXV1JHnsKgbLWNlhScqb2UmyRkQyytRLtL+38TGxkxCflmO+5Z8CSSNY7GidjMIZ7Q4zMjA2n1nGrlTDkzwDCsw+wqFPGQA7ggT6LFQqLGlEnvk78OUA6KvVwQFX2STcnZJlJlqQLfP8xGE6Q6bqLlFE7q+F0cMDm5OPVFj4tSMAOxfKyqY3n8tnKHwxaFQzX9vIqQ7qj0VaWQxdWDvX0E4bVWnVDwQGKzFmZQNqVqBnH3Yq3p7CfFLmjKoWVzMFqB7hH1f8kQCJJRLxJCH1vKwJqQmZZF9bHLqKJP7bFKqFmYqCqLGlzE1bqEo1qCmVNqXH7C4=
+
+# Web server configuration
+webserver:
+  replicas: 1
+  resources:
+    limits:
+      cpu: 1000m
+      memory: 2Gi
+    requests:
+      cpu: 500m
+      memory: 1Gi
+
+  service:
+    type: LoadBalancer  # or ClusterIP with Ingress
+    # annotations:
+    #   cloud.google.com/load-balancer-type: "Internal"  # For internal load balancer
+
+  defaultUser:
+    enabled: true
+    role: Admin
+    username: admin
+    email: admin@example.com
+    firstName: Admin
+    lastName: User
+    password: admin  # Change this! Better to use secret
+
+# Scheduler configuration
+scheduler:
+  replicas: 1
+  resources:
+    limits:
+      cpu: 1000m
+      memory: 2Gi
+    requests:
+      cpu: 500m
+      memory: 1Gi
+
+  # Log groomer sidecar
+  logGroomerSidecar:
+    enabled: true
+    resources:
+      limits:
+        cpu: 100m
+        memory: 128Mi
+      requests:
+        cpu: 50m
+        memory: 64Mi
+
+# Worker configuration (for KubernetesExecutor, workers are created dynamically)
+workers:
+  persistence:
+    enabled: false  # Not needed for KubernetesExecutor
+
+  resources:
+    limits:
+      cpu: 1000m
+      memory: 2Gi
+    requests:
+      cpu: 500m
+      memory: 1Gi
+
+# Triggerer configuration (for deferrable operators)
+triggerer:
+  enabled: true
+  replicas: 1
+  resources:
+    limits:
+      cpu: 500m
+      memory: 1Gi
+    requests:
+      cpu: 250m
+      memory: 512Mi
+
+# Redis configuration (not needed for KubernetesExecutor)
+redis:
+  enabled: false
+
+# StatsD configuration
+statsd:
+  enabled: false
+
+# PgBouncer configuration (optional, for connection pooling)
+pgbouncer:
+  enabled: false
+
+# Create secrets for sensitive data
+createUserJob:
+  useHelmHooks: false
+  applyCustomEnv: false
+
+# Cleanup pods
+cleanup:
+  enabled: true
+  schedule: "*/15 * * * *"
+
+# Flower (not needed for KubernetesExecutor)
+flower:
+  enabled: false
+
+# Extra secrets (can be mounted as environment variables or files)
+extraSecrets:
+  airflow-fernet-key:
+    data: |
+      fernet-key: {{ .Values.fernetKey | b64enc }}
+  # Add more secrets as needed
+
+# Ingress configuration (optional)
+ingress:
+  enabled: false
+  web:
+    enabled: false
+    # annotations:
+    #   kubernetes.io/ingress.class: "nginx"
+    #   cert-manager.io/cluster-issuer: "letsencrypt-prod"
+    # hosts:
+    #   - name: airflow.example.com
+    #     tls:
+    #       enabled: true
+    #       secretName: airflow-tls
+
+# Node selector for GKE
+nodeSelector: {}
+  # cloud.google.com/gke-nodepool: airflow-pool
+
+# Tolerations
+tolerations: []
+
+# Affinity
+affinity: {}

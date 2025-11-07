@@ -1,0 +1,17 @@
+# GCP related packages
+apache-airflow-providers-google>=10.18.0
+google-cloud-storage>=2.10.0
+google-cloud-bigquery>=3.11.0
+
+# Database providers
+apache-airflow-providers-postgres>=5.10.0
+
+# Common utilities
+pandas>=2.0.0
+requests>=2.31.0
+pytz>=2023.3
+
+# Add your custom Python packages below
+# Example:
+# sqlalchemy>=2.0.0
+# pydantic>=2.0.0
