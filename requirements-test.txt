@@ -1,0 +1,31 @@
+# Testing Requirements
+# Install with: pip install -r requirements-test.txt
+
+# Testing framework
+pytest>=7.4.0
+pytest-cov>=4.1.0
+pytest-xdist>=3.3.0  # Parallel test execution
+pytest-timeout>=2.1.0
+pytest-mock>=3.11.0
+
+# Airflow testing
+apache-airflow[testing]>=2.9.1
+
+# Code quality
+flake8>=6.0.0
+black>=23.0.0
+isort>=5.12.0
+pylint>=2.17.0
+mypy>=1.4.0
+
+# Security
+bandit>=1.7.5
+safety>=2.3.5
+
+# Pre-commit hooks
+pre-commit>=3.3.3
+
+# Additional testing utilities
+faker>=19.0.0
+freezegun>=1.2.2
+responses>=0.23.0

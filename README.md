@@ -51,12 +51,50 @@ This repository contains all the necessary files and scripts to deploy Apache Ai
 └── PRODUCTION-DEPLOYMENT.md          # Production deployment guide
 ```
 
+## Testing
+
+The project includes comprehensive testing infrastructure for DAG validation and code quality.
+
+### Quick Test Commands
+
+```bash
+# Install test dependencies
+make install-test-deps
+
+# Run all tests
+make test
+
+# Run specific tests
+make test-dags          # DAG validation
+make test-unit          # Unit tests
+make test-integration   # Integration tests
+
+# Code quality
+make lint               # Run linters
+make format             # Format code
+
+# Pre-commit hooks
+make install-hooks      # Install git hooks
+```
+
+### Test Structure
+
+- **DAG Validation Tests** - Ensure DAGs load correctly and follow best practices
+- **Unit Tests** - Test individual components
+- **Integration Tests** - Test complete workflows
+- **CI/CD Pipeline** - Automated testing on every commit
+
+See [Testing Guide](docs/testing-guide.md) for complete documentation.
+
 ## Prerequisites
 
 ### Local Development
 - Docker and Docker Compose
 - Python 3.11+
 - Git
+
+### Testing (Optional)
+- pytest and test dependencies (install with `make install-test-deps`)
 
 ### GKE Deployment
 - Google Cloud SDK (`gcloud`)
