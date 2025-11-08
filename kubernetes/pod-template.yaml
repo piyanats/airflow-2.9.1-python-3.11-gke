@@ -1,0 +1,232 @@
+# Kubernetes Pod Template for Airflow KubernetesExecutor
+#
+# This template defines the configuration for worker pods created by the
+# KubernetesExecutor. Use this to customize worker pod behavior, resources,
+# security, and other Kubernetes-specific settings.
+#
+# Usage:
+# 1. Customize this template according to your needs
+# 2. Store it in a ConfigMap or mount it directly
+# 3. Reference it in Helm values:
+#    workers:
+#      podTemplateFile: /opt/airflow/pod_templates/pod_template.yaml
+
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: airflow-worker-pod  # This will be overridden by Airflow
+  labels:
+    app: airflow
+    component: worker
+    tier: airflow
+  annotations:
+    # Example: Istio sidecar injection
+    # sidecar.istio.io/inject: "false"
+    # Example: Prometheus scraping
+    prometheus.io/scrape: "true"
+    prometheus.io/port: "8125"
+spec:
+  # Service account for Workload Identity
+  serviceAccountName: airflow-sa
+
+  # Security context for the pod
+  securityContext:
+    runAsUser: 50000
+    runAsGroup: 0
+    fsGroup: 0
+    runAsNonRoot: true
+    seccompProfile:
+      type: RuntimeDefault
+
+  # Restart policy for worker pods
+  restartPolicy: Never
+
+  # Node selection
+  nodeSelector:
+    workload-type: airflow  # Use dedicated Airflow node pool
+
+  # Tolerations for node taints
+  tolerations:
+    - key: "workload-type"
+      operator: "Equal"
+      value: "airflow"
+      effect: "NoSchedule"
+
+  # Affinity and anti-affinity rules
+  affinity:
+    # Prefer to spread pods across nodes
+    podAntiAffinity:
+      preferredDuringSchedulingIgnoredDuringExecution:
+        - weight: 100
+          podAffinityTerm:
+            labelSelector:
+              matchExpressions:
+                - key: component
+                  operator: In
+                  values:
+                    - worker
+            topologyKey: kubernetes.io/hostname
+
+    # Prefer nodes in the same zone as scheduler
+    podAffinity:
+      preferredDuringSchedulingIgnoredDuringExecution:
+        - weight: 50
+          podAffinityTerm:
+            labelSelector:
+              matchExpressions:
+                - key: component
+                  operator: In
+                  values:
+                    - scheduler
+            topologyKey: topology.kubernetes.io/zone
+
+  # Init containers (optional)
+  initContainers:
+    # Example: Wait for database to be ready
+    - name: wait-for-db
+      image: busybox:1.35
+      command:
+        - sh
+        - -c
+        - |
+          until nc -z postgres-service 5432; do
+            echo "Waiting for database..."
+            sleep 2
+          done
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 50000
+        allowPrivilegeEscalation: false
+        capabilities:
+          drop:
+            - ALL
+
+  # Main containers
+  containers:
+    # Base container (will be overridden by Airflow)
+    - name: base
+      image: us.gcr.io/YOUR-PROJECT-ID/airflow-custom:2.9.1-python3.11
+      imagePullPolicy: IfNotPresent
+
+      # Environment variables
+      env:
+        - name: AIRFLOW__CORE__EXECUTOR
+          value: "KubernetesExecutor"
+        - name: AIRFLOW__CORE__SQL_ALCHEMY_CONN
+          valueFrom:
+            secretKeyRef:
+              name: airflow-metadata-secret
+              key: connection
+        - name: AIRFLOW__CORE__FERNET_KEY
+          valueFrom:
+            secretKeyRef:
+              name: airflow-fernet-key
+              key: fernet-key
+        - name: AIRFLOW__LOGGING__REMOTE_LOGGING
+          value: "True"
+        - name: AIRFLOW__LOGGING__REMOTE_BASE_LOG_FOLDER
+          value: "gs://YOUR-GCS-BUCKET/airflow/logs"
+        - name: AIRFLOW__LOGGING__REMOTE_LOG_CONN_ID
+          value: "google_cloud_default"
+        - name: GCP_PROJECT_ID
+          value: "YOUR-PROJECT-ID"
+
+      # Resource requests and limits
+      resources:
+        requests:
+          cpu: "500m"
+          memory: "1Gi"
+          ephemeral-storage: "2Gi"
+        limits:
+          cpu: "2000m"
+          memory: "4Gi"
+          ephemeral-storage: "5Gi"
+
+      # Volume mounts
+      volumeMounts:
+        # DAGs from GitSync
+        - name: dags
+          mountPath: /opt/airflow/dags
+          readOnly: true
+        # Logs (local)
+        - name: logs
+          mountPath: /opt/airflow/logs
+        # Temporary directory
+        - name: tmp
+          mountPath: /tmp
+
+      # Security context for container
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 50000
+        allowPrivilegeEscalation: false
+        readOnlyRootFilesystem: false  # Airflow needs to write to some paths
+        capabilities:
+          drop:
+            - ALL
+
+      # Liveness probe
+      livenessProbe:
+        exec:
+          command:
+            - python
+            - -c
+            - "import airflow; print('OK')"
+        initialDelaySeconds: 30
+        periodSeconds: 30
+        timeoutSeconds: 10
+        failureThreshold: 5
+
+    # Sidecar container example (optional)
+    # - name: log-shipper
+    #   image: fluent/fluent-bit:2.0
+    #   resources:
+    #     requests:
+    #       cpu: "100m"
+    #       memory: "128Mi"
+    #     limits:
+    #       cpu: "200m"
+    #       memory: "256Mi"
+    #   volumeMounts:
+    #     - name: logs
+    #       mountPath: /logs
+    #       readOnly: true
+
+  # Volumes
+  volumes:
+    # DAGs volume (from GitSync sidecar or PVC)
+    - name: dags
+      emptyDir: {}  # This will be configured by Airflow with actual DAG source
+
+    # Logs volume (ephemeral)
+    - name: logs
+      emptyDir:
+        sizeLimit: "10Gi"
+
+    # Temporary directory
+    - name: tmp
+      emptyDir:
+        sizeLimit: "5Gi"
+
+  # Priority class for pod scheduling (optional)
+  # priorityClassName: high-priority
+
+  # DNS configuration (optional)
+  dnsPolicy: ClusterFirst
+  dnsConfig:
+    options:
+      - name: ndots
+        value: "2"
+      - name: timeout
+        value: "2"
+      - name: attempts
+        value: "2"
+
+  # Termination grace period
+  terminationGracePeriodSeconds: 30
+
+  # Host network and IPC (not recommended for workers)
+  hostNetwork: false
+  hostIPC: false
+  hostPID: false

@@ -27,20 +27,19 @@ RUN curl -LsSf https://astral.sh/uv/install.sh | sh
 # Add uv to PATH
 ENV PATH="/root/.cargo/bin:$PATH"
 
-USER airflow
-
-# Create virtual environment for dependencies
-RUN python -m venv /opt/airflow/venv
-
 # Copy requirements file
 COPY requirements.txt /tmp/requirements.txt
 
-# Install Python packages using uv (much faster than pip)
-# uv pip install is compatible with pip but significantly faster
-RUN /root/.cargo/bin/uv pip install \
-    --python /opt/airflow/venv/bin/python \
-    --no-cache \
-    -r /tmp/requirements.txt
+# Create virtual environment and install packages as root
+# This ensures uv has proper permissions
+RUN python -m venv /opt/airflow/venv \
+    && /root/.cargo/bin/uv pip install \
+        --python /opt/airflow/venv/bin/python \
+        --no-cache \
+        -r /tmp/requirements.txt
+
+# Change ownership of venv to airflow user
+RUN chown -R airflow:root /opt/airflow/venv
 
 # ------------------------------------------------------------------------------
 # Stage 2: Runtime - Final lightweight image
@@ -57,10 +56,10 @@ RUN apt-get update \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
 
-USER airflow
-
 # Copy installed packages from builder stage
 COPY --from=builder --chown=airflow:root /opt/airflow/venv /opt/airflow/venv
+
+USER airflow
 
 # Update PATH to use venv packages
 ENV PATH="/opt/airflow/venv/bin:$PATH"
