@@ -2,6 +2,10 @@
 
 This repository contains all the necessary files and scripts to deploy Apache Airflow 2.9.1 with Python 3.11 on Google Kubernetes Engine (GKE) with Workload Identity, external PostgreSQL, GCS logging, and GitSync.
 
+> **📚 For Production Deployments**: See the comprehensive [Production Deployment Guide](PRODUCTION-DEPLOYMENT.md) for best practices, security hardening, and step-by-step production setup.
+
+> **⚖️ Development vs Production**: Review the [Configuration Comparison](docs/configuration-comparison.md) to understand differences between development and production configurations.
+
 ## Features
 
 - **Apache Airflow 2.9.1** with **Python 3.11**
@@ -18,21 +22,30 @@ This repository contains all the necessary files and scripts to deploy Apache Ai
 ```
 .
 ├── docker/
-│   ├── Dockerfile              # Custom Airflow image
-│   └── requirements.txt        # Python dependencies
+│   ├── Dockerfile                    # Custom Airflow image
+│   └── requirements.txt              # Python dependencies
 ├── helm-chart/
-│   └── values.yaml            # Helm chart configuration
+│   ├── values.yaml                   # Development Helm configuration
+│   └── values-production.yaml        # Production Helm configuration
 ├── scripts/
-│   ├── build-and-push.sh      # Build and push Docker image to GCR
-│   └── setup-gke.sh           # Setup GKE environment
-├── dags/                       # Airflow DAGs directory
-│   ├── example_dag.py         # Example DAG
-│   └── example_gcs_dag.py     # Example GCS DAG
-├── plugins/                    # Airflow plugins directory
-├── config/                     # Airflow configuration files
-├── docker-compose.yaml        # Local development setup
-├── .env.example              # Environment variables template
-└── README.md                  # This file
+│   ├── build-and-push.sh             # Build and push Docker image to GCR
+│   ├── setup-gke.sh                  # Setup GKE environment
+│   ├── create-secrets.sh             # Create Kubernetes secrets
+│   ├── setup-secret-manager.sh       # Setup Google Secret Manager
+│   ├── verify-deployment.sh          # Verify GKE deployment
+│   └── test-local.sh                 # Test local deployment
+├── dags/                              # Airflow DAGs directory
+│   ├── example_dag.py                # Example DAG
+│   └── example_gcs_dag.py            # Example GCS DAG
+├── plugins/                           # Airflow plugins directory
+├── config/                            # Airflow configuration files
+├── docs/
+│   └── configuration-comparison.md   # Dev vs Prod comparison
+├── docker-compose.yaml               # Local development setup
+├── .env.example                      # Environment variables template
+├── Makefile                          # Convenient commands
+├── README.md                         # This file
+└── PRODUCTION-DEPLOYMENT.md          # Production deployment guide
 ```
 
 ## Prerequisites
@@ -99,6 +112,8 @@ docker-compose down -v
 ```
 
 ### 2. GKE Deployment
+
+> **⚠️ Note**: This section provides a quick development deployment. For production deployments with high availability, security hardening, and monitoring, see the [Production Deployment Guide](PRODUCTION-DEPLOYMENT.md).
 
 #### Prerequisites
 

@@ -1,4 +1,4 @@
-.PHONY: help local-up local-down local-logs local-test build-image push-image setup-gke verify-deployment clean
+.PHONY: help local-up local-down local-logs local-test build-image push-image setup-gke verify-deployment create-secrets setup-secret-manager clean
 
 help:
 	@echo "Apache Airflow 2.9.1 on GKE - Available Commands"
@@ -10,11 +10,15 @@ help:
 	@echo "  make local-logs       - View logs from local services"
 	@echo "  make local-clean      - Stop and remove all local containers and volumes"
 	@echo ""
-	@echo "GKE Deployment:"
+	@echo "GKE Deployment (Development):"
 	@echo "  make setup-gke        - Setup GKE environment (SA, IAM, secrets)"
 	@echo "  make build-image      - Build custom Airflow Docker image"
 	@echo "  make push-image       - Build and push image to GCR"
 	@echo "  make verify-deployment - Verify GKE deployment"
+	@echo ""
+	@echo "Production Deployment:"
+	@echo "  make create-secrets   - Create Kubernetes secrets for production"
+	@echo "  make setup-secret-manager - Setup Google Secret Manager integration"
 	@echo ""
 	@echo "Cleanup:"
 	@echo "  make clean            - Clean local environment"
@@ -59,6 +63,15 @@ push-image:
 verify-deployment:
 	@echo "Verifying GKE deployment..."
 	@./scripts/verify-deployment.sh
+
+# Production Commands
+create-secrets:
+	@echo "Creating Kubernetes secrets for production..."
+	@./scripts/create-secrets.sh
+
+setup-secret-manager:
+	@echo "Setting up Google Secret Manager..."
+	@./scripts/setup-secret-manager.sh
 
 # Cleanup
 clean: local-clean

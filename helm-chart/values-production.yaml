@@ -1,0 +1,774 @@
+# Apache Airflow Production Helm Chart Values
+# Version: 2.9.1
+# Python: 3.11
+# Platform: GKE
+#
+# This configuration follows production best practices including:
+# - High Availability
+# - Security hardening
+# - Resource optimization
+# - Monitoring and observability
+# - Disaster recovery
+
+###############################################################################
+# Image Configuration
+###############################################################################
+images:
+  airflow:
+    repository: us.gcr.io/YOUR-PROJECT-ID/airflow-custom
+    tag: 2.9.1-python3.11
+    pullPolicy: IfNotPresent
+
+  # Use digest for production immutability (recommended)
+  # digest: sha256:xxxxx
+
+  # Image pull secrets if using private registry
+  # pullSecret: "gcr-json-key"
+
+airflowVersion: "2.9.1"
+
+###############################################################################
+# Executor Configuration
+###############################################################################
+# KubernetesExecutor for production - better isolation and resource management
+executor: "KubernetesExecutor"
+
+###############################################################################
+# Airflow Core Configuration
+###############################################################################
+config:
+  core:
+    dags_folder: /opt/airflow/dags
+    load_examples: 'false'
+    executor: KubernetesExecutor
+    parallelism: 64  # Maximum number of task instances that can run across entire deployment
+    max_active_tasks_per_dag: 32  # Maximum active tasks per DAG
+    max_active_runs_per_dag: 16  # Maximum active DAG runs per DAG
+    dag_file_processor_timeout: 120
+    dagbag_import_timeout: 90
+    killed_task_cleanup_time: 86400  # 24 hours
+
+  # Logging Configuration - GCS
+  logging:
+    remote_logging: 'true'
+    remote_log_conn_id: 'google_cloud_default'
+    remote_base_log_folder: 'gs://YOUR-GCS-BUCKET/airflow/logs'
+    logging_level: 'INFO'
+    colored_console_log: 'false'
+    log_filename_template: '{{ ti.dag_id }}/{{ ti.task_id }}/{{ ts }}/{{ try_number }}.log'
+    log_processor_filename_template: '{{ filename }}.log'
+    encrypt_s3_logs: 'false'
+
+  # Webserver Configuration
+  webserver:
+    base_url: 'https://airflow.example.com'  # Update with your domain
+    expose_config: 'false'  # Don't expose config in UI for security
+    expose_hostname: 'false'
+    expose_stacktrace: 'false'
+    enable_proxy_fix: 'true'  # Enable if behind load balancer
+    web_server_worker_timeout: 300
+    worker_refresh_interval: 6000
+    reload_on_plugin_change: 'false'  # Disable in production
+
+  # Scheduler Configuration
+  scheduler:
+    parsing_processes: 4  # Number of processes to parse DAGs
+    scheduler_heartbeat_sec: 5
+    min_file_process_interval: 60  # Minimum seconds between DAG file checks
+    dag_dir_list_interval: 300  # How often to scan DAG directory
+    print_stats_interval: 30
+    pool_metrics_interval: 5.0
+    scheduler_health_check_threshold: 60
+    orphaned_tasks_check_interval: 300
+    child_process_log_directory: '/opt/airflow/logs/scheduler'
+
+  # Kubernetes Executor Configuration
+  kubernetes_executor:
+    namespace: 'airflow-prod'  # Update with your namespace
+    worker_container_repository: us.gcr.io/YOUR-PROJECT-ID/airflow-custom
+    worker_container_tag: 2.9.1-python3.11
+    delete_worker_pods: 'true'
+    delete_worker_pods_on_failure: 'false'  # Keep for debugging
+    worker_pods_creation_batch_size: 16
+    multi_namespace_mode: 'false'
+    in_cluster: 'true'
+    kube_client_request_args: '{}'
+
+  # Email Configuration (configure based on your provider)
+  email:
+    email_backend: 'airflow.providers.sendgrid.utils.emailer.send_email'  # or smtp
+
+  # SMTP Configuration (if using SMTP)
+  smtp:
+    smtp_host: 'smtp.gmail.com'
+    smtp_starttls: 'true'
+    smtp_ssl: 'false'
+    smtp_port: 587
+    smtp_mail_from: 'airflow@example.com'
+
+  # API Configuration
+  api:
+    auth_backends: 'airflow.api.auth.backend.basic_auth,airflow.api.auth.backend.session'
+    enable_experimental_api: 'false'  # Deprecated
+
+  # Metrics and Monitoring
+  metrics:
+    statsd_on: 'true'
+    statsd_host: 'statsd-exporter'
+    statsd_port: 9125
+    statsd_prefix: 'airflow'
+
+  # Celery (not used with KubernetesExecutor, but kept for reference)
+  celery:
+    worker_concurrency: 16
+
+###############################################################################
+# Database Configuration - External PostgreSQL (Cloud SQL)
+###############################################################################
+postgresql:
+  enabled: false  # Using external database
+
+data:
+  metadataConnection:
+    user: airflow
+    # Use secret reference instead of plain password
+    # pass: airflow_password
+    protocol: postgresql
+    host: YOUR-CLOUDSQL-PRIVATE-IP  # Cloud SQL private IP
+    port: 5432
+    db: airflow
+    sslmode: require  # Enforce SSL for Cloud SQL
+
+  # Use secret for database connection
+  metadataSecretName: airflow-metadata-secret
+
+  # Result backend (not needed for KubernetesExecutor)
+  # resultBackendSecretName: airflow-result-backend-secret
+
+###############################################################################
+# Service Account and Workload Identity
+###############################################################################
+serviceAccount:
+  create: true
+  name: "airflow-sa"
+  annotations:
+    iam.gke.io/gcp-service-account: "airflow-gke@YOUR-PROJECT-ID.iam.gserviceaccount.com"
+
+# RBAC Configuration
+rbac:
+  create: true
+  createSCCRoleBinding: false
+
+###############################################################################
+# DAGs Configuration - GitSync
+###############################################################################
+dags:
+  persistence:
+    enabled: false  # Using GitSync instead
+
+  gitSync:
+    enabled: true
+    repo: git@github.com:YOUR-ORG/YOUR-REPO.git
+    branch: main
+    rev: HEAD
+    depth: 1
+    maxFailures: 3
+    subPath: "dags"
+    wait: 60
+    containerName: git-sync
+    uid: 65533
+
+    # Resource limits for git-sync container
+    resources:
+      limits:
+        cpu: 200m
+        memory: 256Mi
+      requests:
+        cpu: 100m
+        memory: 128Mi
+
+    # SSH Key Secret
+    sshKeySecret: airflow-ssh-secret
+
+    # Known hosts
+    knownHosts: |
+      github.com ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABgQCj7ndNxQowgcQnjshcLrqPEiiphnt+VTTvDP6mHBL9j1aNUkY4Ue1gvwnGLVlOhGeYrnZaMgRK6+PKCUXaDbC7qtbW8gIkhL7aGCsOr/C56SJMy/BCZfxd1nWzAOxSDPgVsmerOBYfNqltV9/hWCqBywINIR+5dIg6JTJ72pcEpEjcYgXkE2YEFXV1JHnsKgbLWNlhScqb2UmyRkQyytRLtL+38TGxkxCflmO+5Z8CSSNY7GidjMIZ7Q4zMjA2n1nGrlTDkzwDCsw+wqFPGQA7ggT6LFQqLGlEnvk78OUA6KvVwQFX2STcnZJlJlqQLfP8xGE6Q6bqLlFE7q+F0cMDm5OPVFj4tSMAOxfKyqY3n8tnKHwxaFQzX9vIqQ7qj0VaWQxdWDvX0E4bVWnVDwQGKzFmZQNqVqBnH3Yq3p7CfFLmjKoWVzMFqB7hH1f8kQCJJRLxJCH1vKwJqQmZZF9bHLqKJP7bFKqFmYqCqLGlzE1bqEo1qCmVNqXH7C4=
+      github.com ecdsa-sha2-nistp256 AAAAE2VjZHNhLXNoYTItbmlzdHAyNTYAAAAIbmlzdHAyNTYAAABBBEmKSENjQEezOmxkZMy7opKgwFB9nkt5YRrYMjNuG5N87uRgg6CLrbo5wAdT/y6v0mKV0U2w0WZ2YB/++Tpockg=
+      github.com ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIOMqqnkVzrm0SdG6UOoqKLsabgH5C9okWi0dh2l9GKJl
+
+###############################################################################
+# Webserver Configuration
+###############################################################################
+webserver:
+  # High availability - multiple replicas
+  replicas: 2
+
+  # Resource configuration
+  resources:
+    limits:
+      cpu: 2000m
+      memory: 4Gi
+    requests:
+      cpu: 1000m
+      memory: 2Gi
+
+  # Liveness and readiness probes
+  livenessProbe:
+    enabled: true
+    initialDelaySeconds: 60
+    periodSeconds: 30
+    timeoutSeconds: 10
+    failureThreshold: 5
+
+  readinessProbe:
+    enabled: true
+    initialDelaySeconds: 30
+    periodSeconds: 10
+    timeoutSeconds: 10
+    failureThreshold: 3
+
+  # Service configuration
+  service:
+    type: ClusterIP  # Use with Ingress
+    ports:
+      - name: airflow-ui
+        port: 8080
+    annotations:
+      cloud.google.com/neg: '{"ingress": true}'
+      cloud.google.com/backend-config: '{"default": "airflow-backend-config"}'
+
+  # Default admin user
+  defaultUser:
+    enabled: true
+    role: Admin
+    username: admin
+    email: admin@example.com
+    firstName: Admin
+    lastName: User
+    # Use secret for password
+    # password: use-secret-instead
+
+  # Security context
+  securityContext:
+    runAsNonRoot: true
+    runAsUser: 50000
+    fsGroup: 0
+
+  # Webserver configuration file
+  webserverConfig: |
+    from airflow import configuration as conf
+    from flask_appbuilder.security.manager import AUTH_DB
+
+    # Authentication type
+    AUTH_TYPE = AUTH_DB
+
+    # Uncomment to setup OAuth/OIDC
+    # AUTH_TYPE = AUTH_OAUTH
+
+    # Security settings
+    SECRET_KEY = conf.get('webserver', 'secret_key')
+    WTF_CSRF_ENABLED = True
+    WTF_CSRF_TIME_LIMIT = None
+
+    # Session configuration
+    PERMANENT_SESSION_LIFETIME = 1800  # 30 minutes
+    SESSION_COOKIE_SECURE = True
+    SESSION_COOKIE_HTTPONLY = True
+    SESSION_COOKIE_SAMESITE = 'Lax'
+
+  # Extra environment variables from secrets
+  extraEnvFrom:
+    - secretRef:
+        name: airflow-webserver-secret
+
+  # Pod Disruption Budget
+  podDisruptionBudget:
+    enabled: true
+    maxUnavailable: 1
+
+  # Pod Anti-Affinity for high availability
+  affinity:
+    podAntiAffinity:
+      preferredDuringSchedulingIgnoredDuringExecution:
+        - weight: 100
+          podAffinityTerm:
+            labelSelector:
+              matchExpressions:
+                - key: component
+                  operator: In
+                  values:
+                    - webserver
+            topologyKey: kubernetes.io/hostname
+
+###############################################################################
+# Scheduler Configuration
+###############################################################################
+scheduler:
+  # Single scheduler for consistency (StatefulSet)
+  replicas: 2  # For HA, run 2 schedulers with leader election
+
+  # Resource configuration - scheduler needs more resources
+  resources:
+    limits:
+      cpu: 2000m
+      memory: 4Gi
+    requests:
+      cpu: 1000m
+      memory: 2Gi
+
+  # Liveness and readiness probes
+  livenessProbe:
+    enabled: true
+    initialDelaySeconds: 60
+    periodSeconds: 30
+    timeoutSeconds: 10
+    failureThreshold: 5
+
+  readinessProbe:
+    enabled: true
+    initialDelaySeconds: 30
+    periodSeconds: 10
+    timeoutSeconds: 10
+    failureThreshold: 3
+
+  # Security context
+  securityContext:
+    runAsNonRoot: true
+    runAsUser: 50000
+    fsGroup: 0
+
+  # Log groomer sidecar
+  logGroomerSidecar:
+    enabled: true
+    retentionDays: 15
+    resources:
+      limits:
+        cpu: 100m
+        memory: 128Mi
+      requests:
+        cpu: 50m
+        memory: 64Mi
+
+  # Extra environment variables
+  extraEnvFrom:
+    - secretRef:
+        name: airflow-scheduler-secret
+
+  # Pod Disruption Budget
+  podDisruptionBudget:
+    enabled: true
+    maxUnavailable: 1
+
+  # Pod Anti-Affinity
+  affinity:
+    podAntiAffinity:
+      preferredDuringSchedulingIgnoredDuringExecution:
+        - weight: 100
+          podAffinityTerm:
+            labelSelector:
+              matchExpressions:
+                - key: component
+                  operator: In
+                  values:
+                    - scheduler
+            topologyKey: kubernetes.io/hostname
+
+###############################################################################
+# Workers Configuration (for KubernetesExecutor)
+###############################################################################
+workers:
+  # Not used with KubernetesExecutor, but configured for task pods
+  persistence:
+    enabled: false
+
+  # Resource configuration for Kubernetes worker pods
+  resources:
+    limits:
+      cpu: 2000m
+      memory: 4Gi
+    requests:
+      cpu: 500m
+      memory: 1Gi
+
+  # Security context for worker pods
+  securityContext:
+    runAsNonRoot: true
+    runAsUser: 50000
+    fsGroup: 0
+
+  # Worker pod template file (optional - for advanced customization)
+  # podTemplateFile: /opt/airflow/pod_templates/pod_template.yaml
+
+###############################################################################
+# Triggerer Configuration (for Deferrable Operators)
+###############################################################################
+triggerer:
+  enabled: true
+  replicas: 2  # High availability
+
+  # Resource configuration
+  resources:
+    limits:
+      cpu: 1000m
+      memory: 2Gi
+    requests:
+      cpu: 500m
+      memory: 1Gi
+
+  # Liveness and readiness probes
+  livenessProbe:
+    enabled: true
+    initialDelaySeconds: 60
+    periodSeconds: 30
+    timeoutSeconds: 10
+    failureThreshold: 5
+
+  readinessProbe:
+    enabled: true
+    initialDelaySeconds: 30
+    periodSeconds: 10
+    timeoutSeconds: 10
+    failureThreshold: 3
+
+  # Security context
+  securityContext:
+    runAsNonRoot: true
+    runAsUser: 50000
+    fsGroup: 0
+
+  # Pod Disruption Budget
+  podDisruptionBudget:
+    enabled: true
+    maxUnavailable: 1
+
+  # Pod Anti-Affinity
+  affinity:
+    podAntiAffinity:
+      preferredDuringSchedulingIgnoredDuringExecution:
+        - weight: 100
+          podAffinityTerm:
+            labelSelector:
+              matchExpressions:
+                - key: component
+                  operator: In
+                  values:
+                    - triggerer
+            topologyKey: kubernetes.io/hostname
+
+###############################################################################
+# Redis Configuration (not used with KubernetesExecutor)
+###############################################################################
+redis:
+  enabled: false
+
+###############################################################################
+# PgBouncer Configuration (Connection Pooling)
+###############################################################################
+pgbouncer:
+  enabled: true  # Highly recommended for production
+  replicas: 2
+
+  # Resource configuration
+  resources:
+    limits:
+      cpu: 500m
+      memory: 512Mi
+    requests:
+      cpu: 250m
+      memory: 256Mi
+
+  # PgBouncer configuration
+  maxClientConn: 200
+  maxDbConn: 20  # Per PgBouncer instance
+  poolMode: transaction
+
+  # Security context
+  securityContext:
+    runAsNonRoot: true
+    runAsUser: 65534
+
+  # Pod Disruption Budget
+  podDisruptionBudget:
+    enabled: true
+    maxUnavailable: 1
+
+  # Pod Anti-Affinity
+  affinity:
+    podAntiAffinity:
+      preferredDuringSchedulingIgnoredDuringExecution:
+        - weight: 100
+          podAffinityTerm:
+            labelSelector:
+              matchExpressions:
+                - key: component
+                  operator: In
+                  values:
+                    - pgbouncer
+            topologyKey: kubernetes.io/hostname
+
+###############################################################################
+# StatsD/Prometheus Configuration
+###############################################################################
+statsd:
+  enabled: true
+
+  # Resource configuration
+  resources:
+    limits:
+      cpu: 200m
+      memory: 256Mi
+    requests:
+      cpu: 100m
+      memory: 128Mi
+
+  # Override statsd-exporter image for better metrics
+  # Use Prometheus StatsD Exporter
+  extraMappings:
+    - match: "airflow.dag_processing.last_runtime.*"
+      name: "airflow_dag_processing_last_runtime"
+      labels:
+        dag_file: "$1"
+    - match: "airflow.dag_processing.last_run.seconds_ago.*"
+      name: "airflow_dag_processing_last_run_seconds_ago"
+      labels:
+        dag_file: "$1"
+    - match: "airflow.dagrun.*.first_task_scheduling_delay"
+      name: "airflow_dagrun_first_task_scheduling_delay"
+      labels:
+        dag_id: "$1"
+    - match: "airflow.pool.open_slots.*"
+      name: "airflow_pool_open_slots"
+      labels:
+        pool_name: "$1"
+    - match: "airflow.pool.used_slots.*"
+      name: "airflow_pool_used_slots"
+      labels:
+        pool_name: "$1"
+    - match: "airflow.executor.open_slots"
+      name: "airflow_executor_open_slots"
+    - match: "airflow.executor.queued_tasks"
+      name: "airflow_executor_queued_tasks"
+    - match: "airflow.executor.running_tasks"
+      name: "airflow_executor_running_tasks"
+
+###############################################################################
+# Ingress Configuration
+###############################################################################
+ingress:
+  enabled: true
+  web:
+    enabled: true
+
+    # Annotations for GKE Ingress
+    annotations:
+      kubernetes.io/ingress.class: "gce"
+      kubernetes.io/ingress.global-static-ip-name: "airflow-prod-ip"  # Reserve static IP
+      networking.gke.io/managed-certificates: "airflow-cert"  # Managed certificate
+      kubernetes.io/ingress.allow-http: "false"  # HTTPS only
+      # For Cloud Armor (DDoS protection)
+      cloud.google.com/armor-config: '{"airflow-security-policy": "airflow-armor-policy"}'
+
+    # Path configuration
+    path: "/*"
+    pathType: ImplementationSpecific
+
+    # Host configuration
+    hosts:
+      - name: airflow.example.com  # Update with your domain
+        tls:
+          enabled: true
+          secretName: ""  # Use Google-managed cert instead
+
+    # Ingress-specific configurations
+    ingressClassName: "gce"
+
+  # Flower ingress (if needed)
+  flower:
+    enabled: false
+
+###############################################################################
+# Environment Variables
+###############################################################################
+env:
+  - name: AIRFLOW__CORE__FERNET_KEY
+    valueFrom:
+      secretKeyRef:
+        name: airflow-fernet-key
+        key: fernet-key
+  - name: AIRFLOW__WEBSERVER__SECRET_KEY
+    valueFrom:
+      secretKeyRef:
+        name: airflow-webserver-secret
+        key: webserver-secret-key
+  - name: GCP_PROJECT_ID
+    value: "YOUR-PROJECT-ID"
+  - name: AIRFLOW__METRICS__STATSD_ON
+    value: "True"
+  - name: AIRFLOW__METRICS__STATSD_HOST
+    value: "statsd-exporter"
+  - name: AIRFLOW__METRICS__STATSD_PORT
+    value: "9125"
+
+# Extra environment variables from secrets
+extraEnvFrom:
+  - secretRef:
+      name: airflow-env-secret
+
+###############################################################################
+# Secret Management
+###############################################################################
+# Secrets should be created externally for better security
+# Don't store secrets in values.yaml
+
+# Create user job configuration
+createUserJob:
+  useHelmHooks: false
+  applyCustomEnv: true
+
+# Migrate database job
+migrateDatabaseJob:
+  enabled: true
+  useHelmHooks: false
+  applyCustomEnv: true
+  jobAnnotations:
+    "helm.sh/hook": pre-install,pre-upgrade
+    "helm.sh/hook-weight": "1"
+    "helm.sh/hook-delete-policy": before-hook-creation
+
+###############################################################################
+# Cleanup Configuration
+###############################################################################
+cleanup:
+  enabled: true
+  # Clean up old pods
+  schedule: "*/15 * * * *"
+
+  # Resource configuration
+  resources:
+    limits:
+      cpu: 100m
+      memory: 128Mi
+    requests:
+      cpu: 50m
+      memory: 64Mi
+
+###############################################################################
+# Flower (Web UI for Celery - not used with KubernetesExecutor)
+###############################################################################
+flower:
+  enabled: false
+
+###############################################################################
+# Network Policy
+###############################################################################
+networkPolicies:
+  enabled: true
+
+###############################################################################
+# Node Affinity and Tolerations
+###############################################################################
+# Node selector for dedicated Airflow node pool
+nodeSelector:
+  workload-type: airflow  # Create a dedicated node pool with this label
+
+# Tolerations for dedicated node pool
+tolerations:
+  - key: "workload-type"
+    operator: "Equal"
+    value: "airflow"
+    effect: "NoSchedule"
+
+# Global affinity (can be overridden per component)
+affinity: {}
+
+###############################################################################
+# Extra Configuration
+###############################################################################
+# Extra ConfigMaps
+extraConfigMaps: {}
+
+# Extra Secrets
+extraSecrets: {}
+
+# Extra volumes
+extraVolumes: []
+
+# Extra volume mounts
+extraVolumeMounts: []
+
+###############################################################################
+# Monitoring and Observability
+###############################################################################
+# Prometheus ServiceMonitor (requires Prometheus Operator)
+serviceMonitor:
+  enabled: false  # Enable if using Prometheus Operator
+  interval: "30s"
+  selector:
+    prometheus: kube-prometheus
+
+# Prometheus PodMonitor
+podMonitor:
+  enabled: false
+  interval: "30s"
+
+###############################################################################
+# Security Settings
+###############################################################################
+# Security Context for all pods (can be overridden per component)
+securityContext:
+  runAsNonRoot: true
+  runAsUser: 50000
+  fsGroup: 0
+
+# Pod Security Policy (deprecated in K8s 1.25+)
+podSecurityPolicy:
+  enabled: false
+
+###############################################################################
+# Limits and Quotas
+###############################################################################
+# Resource quotas should be set at namespace level
+# Example: kubectl create quota airflow-quota --hard=cpu=20,memory=40Gi -n airflow-prod
+
+###############################################################################
+# Logging
+###############################################################################
+# Logs persistence (for local logs)
+logs:
+  persistence:
+    enabled: true
+    size: 100Gi
+    storageClassName: standard-rwo  # Use appropriate storage class
+    accessMode: ReadWriteOnce
+
+###############################################################################
+# Labels and Annotations
+###############################################################################
+labels: {}
+
+podAnnotations:
+  prometheus.io/scrape: "true"
+  prometheus.io/port: "9102"
+
+# Common annotations for all resources
+commonAnnotations: {}
+
+###############################################################################
+# Priority Classes
+###############################################################################
+# Create priority class for critical Airflow components
+priorityClassName: ""  # Set to high-priority class name if needed
+
+###############################################################################
+# Autoscaling (HPA)
+###############################################################################
+# Note: HPA for webserver only (scheduler should not autoscale)
+# Uncomment and configure if needed
+#
+# webserver:
+#   autoscaling:
+#     enabled: true
+#     minReplicas: 2
+#     maxReplicas: 10
+#     targetCPUUtilizationPercentage: 70
+#     targetMemoryUtilizationPercentage: 80
