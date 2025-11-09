@@ -4,14 +4,128 @@ This guide provides a comprehensive checklist and best practices for deploying A
 
 ## Table of Contents
 
-1. [Pre-Deployment Checklist](#pre-deployment-checklist)
-2. [Infrastructure Setup](#infrastructure-setup)
-3. [Security Configuration](#security-configuration)
-4. [Deployment Steps](#deployment-steps)
-5. [Post-Deployment Validation](#post-deployment-validation)
-6. [Monitoring and Observability](#monitoring-and-observability)
-7. [Backup and Disaster Recovery](#backup-and-disaster-recovery)
-8. [Maintenance and Operations](#maintenance-and-operations)
+1. [Prerequisites](#prerequisites)
+2. [Pre-Deployment Checklist](#pre-deployment-checklist)
+3. [Infrastructure Setup](#infrastructure-setup)
+4. [Security Configuration](#security-configuration)
+5. [Deployment Steps](#deployment-steps)
+6. [Post-Deployment Validation](#post-deployment-validation)
+7. [Monitoring and Observability](#monitoring-and-observability)
+8. [Backup and Disaster Recovery](#backup-and-disaster-recovery)
+9. [Maintenance and Operations](#maintenance-and-operations)
+
+## Prerequisites
+
+### Required Software Versions
+
+This guide assumes you have the following software installed and configured:
+
+#### Workstation Tools
+
+| Tool | Minimum Version | Recommended | Purpose |
+|------|----------------|-------------|---------|
+| **gcloud SDK** | 450.0.0 | 462.0.0+ | GCP management |
+| **kubectl** | 1.27.0 | 1.29.0+ | Kubernetes management |
+| **Helm** | 3.12.0 | 3.14.0+ | Application deployment |
+| **Docker** | 20.10.0 | 24.0.7+ | Image building |
+| **Python** | 3.11.0 | 3.11.7+ | Scripting and testing |
+| **Git** | 2.30.0 | 2.43.0+ | Version control |
+
+**Verification Commands:**
+```bash
+gcloud version           # Should show 450.0.0+
+kubectl version --client # Should show 1.27.0+
+helm version            # Should show 3.12.0+
+docker --version        # Should show 20.10.0+
+python3 --version       # Should show 3.11.0+
+```
+
+#### GCP Infrastructure Versions
+
+| Component | Version | Notes |
+|-----------|---------|-------|
+| **Kubernetes (GKE)** | 1.27+ | Use Regular or Stable channel |
+| **PostgreSQL (Cloud SQL)** | 14 or 15 | Version 15 recommended |
+| **Python Runtime** | 3.11 | For Airflow workers |
+| **Apache Airflow** | 2.9.1 | Production release |
+
+### Required GCP APIs
+
+Enable these APIs in your GCP project:
+```bash
+gcloud services enable \
+  container.googleapis.com \
+  compute.googleapis.com \
+  sqladmin.googleapis.com \
+  storage-api.googleapis.com \
+  cloudresourcemanager.googleapis.com \
+  iam.googleapis.com \
+  dns.googleapis.com
+```
+
+### Required IAM Permissions
+
+Your GCP user or service account needs these roles:
+- **Project Editor** or **Project Owner** (for full access)
+- Or specific roles:
+  - Kubernetes Engine Admin
+  - Cloud SQL Admin
+  - Storage Admin
+  - Service Account Admin
+  - IAM Security Admin
+  - Compute Network Admin
+
+### Resource Quotas
+
+Ensure your GCP project has sufficient quotas:
+
+| Resource | Minimum Requirement | Recommended |
+|----------|-------------------|-------------|
+| **CPU cores** | 12 cores | 24+ cores |
+| **Memory (RAM)** | 48 GB | 96+ GB |
+| **Persistent Disk** | 500 GB | 1 TB+ |
+| **Static IP addresses** | 1 | 2 |
+| **Load balancers** | 1 | 2 |
+
+Check quotas:
+```bash
+gcloud compute project-info describe --project=YOUR_PROJECT_ID
+```
+
+### Network Requirements
+
+- **VPC Network:** Default or custom VPC
+- **Subnet:** Adequate IP range for pods and services
+- **Firewall Rules:** Allow internal cluster communication
+- **NAT Gateway:** For outbound internet access (optional)
+- **Private Google Access:** Enabled for private GKE nodes
+
+### Cost Considerations
+
+Estimated monthly costs for production deployment:
+
+| Component | Configuration | Est. Monthly Cost (USD) |
+|-----------|--------------|------------------------|
+| **GKE Cluster** | 3x n1-standard-4 nodes | ~$300-400 |
+| **Cloud SQL** | db-custom-4-15360, HA | ~$400-500 |
+| **GCS Storage** | 100GB + operations | ~$3-10 |
+| **Load Balancer** | HTTP(S) LB | ~$20-30 |
+| **Cloud NAT** | Optional | ~$40-50 |
+| **Data Transfer** | Varies | ~$10-50 |
+| **Total** | | **~$800-1000/month** |
+
+*Costs vary by region, usage, and configuration*
+
+### Knowledge Prerequisites
+
+Team members should be familiar with:
+- ✅ Kubernetes concepts and `kubectl` commands
+- ✅ Helm chart management
+- ✅ Apache Airflow architecture
+- ✅ GCP services (GKE, Cloud SQL, GCS)
+- ✅ PostgreSQL database administration
+- ✅ CI/CD pipelines
+- ✅ Monitoring and alerting
 
 ## Pre-Deployment Checklist
 

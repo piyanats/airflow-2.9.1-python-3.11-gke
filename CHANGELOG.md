@@ -8,21 +8,41 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- Detailed version requirements documentation (VERSION.md)
+- Comprehensive software version tables in README.md
+- Extended prerequisites section in PRODUCTION-DEPLOYMENT.md
+- Infrastructure requirements and specifications
+- Cost estimation tables for production deployment
+- Resource quota requirements
+- Knowledge prerequisites checklist
+- Installation verification commands
+- Compatibility matrix
+- End of life dates for dependencies
+
+### Changed
+- Enhanced README prerequisites with version tables
+- Updated PRODUCTION-DEPLOYMENT prerequisites with detailed versions
+- Added installation guides and reference links
+- Improved documentation clarity with specific versions
+
+## [1.1.0] - 2025-11-08
+
+### Added
 - Comprehensive testing infrastructure
-  - DAG validation tests
+  - DAG validation tests (15+ test cases)
   - Unit test structure
   - Integration test structure
   - pytest configuration
   - Test fixtures and conftest.py
 - Test dependencies (requirements-test.txt)
-- GitHub Actions CI/CD pipeline
-- Pre-commit hooks configuration
+- GitHub Actions CI/CD pipeline (6 jobs)
+- Pre-commit hooks configuration (10+ hooks)
 - Code quality tools (flake8, black, isort, pylint, bandit)
 - Security scanning with Trivy
-- Testing documentation guide
+- Testing documentation guide (docs/testing-guide.md)
 - Makefile test commands (test, lint, format, install-hooks)
-- Project review documentation
-- Comprehensive troubleshooting guide
+- Project review documentation (PROJECT-REVIEW.md)
+- Comprehensive troubleshooting guide (docs/troubleshooting.md)
 - Kubernetes pod template for worker customization
 - .gitkeep files for empty directories
 

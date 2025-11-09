@@ -88,20 +88,96 @@ See [Testing Guide](docs/testing-guide.md) for complete documentation.
 
 ## Prerequisites
 
-### Local Development
-- Docker and Docker Compose
-- Python 3.11+
-- Git
+### Software Requirements
 
-### Testing (Optional)
-- pytest and test dependencies (install with `make install-test-deps`)
+#### Local Development
 
-### GKE Deployment
-- Google Cloud SDK (`gcloud`)
-- `kubectl` CLI
-- Helm 3
-- A GKE cluster with Workload Identity enabled
-- Access to create GCP service accounts and IAM bindings
+| Software | Minimum Version | Recommended | Tested With |
+|----------|----------------|-------------|-------------|
+| **Docker** | 20.10.0 | 24.0.0+ | 24.0.7 |
+| **Docker Compose** | 2.0.0 | 2.20.0+ | 2.23.0 |
+| **Python** | 3.11.0 | 3.11.7+ | 3.11.7 |
+| **Git** | 2.30.0 | 2.40.0+ | 2.43.0 |
+
+**Installation Verification:**
+```bash
+docker --version          # Docker version 24.0.7
+docker-compose --version  # Docker Compose version 2.23.0
+python3 --version         # Python 3.11.7
+git --version            # git version 2.43.0
+```
+
+#### Testing (Optional)
+
+| Software | Minimum Version | Recommended |
+|----------|----------------|-------------|
+| **pytest** | 7.4.0 | 8.0.0+ |
+| **pre-commit** | 3.0.0 | 3.5.0+ |
+
+Install with: `make install-test-deps`
+
+#### GKE Deployment
+
+| Software | Minimum Version | Recommended | Tested With |
+|----------|----------------|-------------|-------------|
+| **Google Cloud SDK** | 450.0.0 | 460.0.0+ | 462.0.0 |
+| **kubectl** | 1.27.0 | 1.28.0+ | 1.29.0 |
+| **Helm** | 3.12.0 | 3.14.0+ | 3.14.0 |
+
+**Installation Verification:**
+```bash
+gcloud version           # Google Cloud SDK 462.0.0
+kubectl version --client # Client Version: v1.29.0
+helm version            # Version: v3.14.0
+```
+
+**Installation Guides:**
+- [Install Docker](https://docs.docker.com/engine/install/)
+- [Install Docker Compose](https://docs.docker.com/compose/install/)
+- [Install Python 3.11](https://www.python.org/downloads/)
+- [Install gcloud SDK](https://cloud.google.com/sdk/docs/install)
+- [Install kubectl](https://kubernetes.io/docs/tasks/tools/)
+- [Install Helm](https://helm.sh/docs/intro/install/)
+
+### Infrastructure Requirements
+
+#### GKE Cluster
+- **Kubernetes Version:** 1.27+ (Recommended: 1.28+)
+- **Node Pool:** Minimum 3 nodes
+- **Machine Type:** n1-standard-2 or better (Recommended: n1-standard-4)
+- **Workload Identity:** Enabled
+- **GKE Version:** Regular or Stable release channel
+
+#### Cloud SQL (PostgreSQL)
+- **PostgreSQL Version:** 14 or 15
+- **Instance Type:** db-custom-2-7680 minimum (Recommended: db-custom-4-15360)
+- **High Availability:** Recommended for production
+- **Private IP:** Required for secure connection
+
+#### Google Cloud Storage
+- **Bucket:** Standard storage class
+- **Region:** Same as GKE cluster
+- **Versioning:** Enabled (Recommended)
+
+#### Network
+- **VPC:** Default or custom VPC
+- **Subnet:** IP range for GKE nodes
+- **Firewall:** Allow internal communication
+
+### Access Requirements
+
+- **GCP Project:** With billing enabled
+- **IAM Permissions:**
+  - Kubernetes Engine Admin
+  - Storage Admin
+  - Cloud SQL Admin
+  - Service Account Admin
+  - IAM Security Admin
+- **API Enablement:**
+  - Kubernetes Engine API
+  - Cloud SQL Admin API
+  - Cloud Storage API
+  - Container Registry API
 
 ## Quick Start
 
